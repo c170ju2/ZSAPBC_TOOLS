@@ -1,0 +1,1144 @@
+*&---------------------------------------------------------------------*
+*& Report ZBCTL0001
+*&---------------------------------------------------------------------*
+*& Create By Pine
+*& Generate Mass Batch Job
+*&
+*&---------------------------------------------------------------------*
+REPORT zbctl0001 MESSAGE-ID bc.
+
+TYPE-POOLS: icon.
+
+TABLES : tadir, varid, sscrfields.
+
+TYPES : BEGIN OF ty_varid,
+          mandt	     TYPE mandt,
+          report     TYPE	vari_reprt,
+          variant    TYPE variant,
+          environmnt TYPE varid_env,
+        END OF ty_varid.
+
+TYPES : BEGIN OF ty_tadir,
+          pgmid	   TYPE pgmid,
+          object   TYPE trobjtype,
+          obj_name TYPE sobj_name,
+        END OF ty_tadir.
+
+TYPES : BEGIN OF ty_excel,
+          zindex     TYPE i,
+          zcheck     TYPE char1,
+
+* JOB_OPEN FUNCTION.
+          zjobname   LIKE tbtcjob-jobname,
+          zjobcount  LIKE tbtcjob-jobcount,
+
+* JOB_SUBMIT FUNCTION.
+          zstep      TYPE char4,
+          zreport    LIKE sy-repid,
+          zvariant   LIKE raldb-variant,
+
+* JOB_CLOSE FUNCTION.
+          zpr_id     TYPE char1,
+          zpr_value  TYPE num4,
+
+* zpr_id type of value lists.
+
+* A = Daily.
+* B = Min.
+* C = Monthly.
+* D = Hour
+* E = Week
+
+          zprddays   LIKE tbtcjob-prddays,
+          zprdhours  LIKE tbtcjob-prdhours,
+          zprdmins   LIKE tbtcjob-prdmins,
+          zprdmonths LIKE tbtcjob-prdmonths,
+          zprdweeks  LIKE tbtcjob-prdweeks,
+
+          zsdlstrtdt LIKE tbtcjob-sdlstrtdt,
+          zsdlstrttm LIKE tbtcjob-sdlstrttm,
+
+          zstate     TYPE char1,
+
+          ztext      TYPE char100,
+
+* zstate type of value lists.
+* A = Active.
+* F = Fail.
+* N = Unknown.
+* U = Upload.
+* C = Vaildation Check OK.
+* E = Vaildation Check F.
+
+        END OF ty_excel.
+
+TYPES : BEGIN OF ty_cnt_list,
+
+* JOB_OPEN FUNCTION.
+          zjobname  LIKE tbtcjob-jobname,
+          zjobcount LIKE tbtcjob-jobcount,
+          zstep     TYPE char4,
+          zreport   LIKE sy-repid,
+          zvariant  LIKE raldb-variant,
+        END OF ty_cnt_list.
+
+TYPES: BEGIN OF ty_tab_list,
+         ztab_nm TYPE tabname,
+         zdata   TYPE REF TO data,
+       END OF ty_tab_list.
+
+DATA : gt_tabl  TYPE HASHED TABLE OF ty_tab_list WITH UNIQUE KEY ztab_nm,
+       gs_tabl  TYPE ty_tab_list,
+
+       gt_varid TYPE TABLE OF ty_varid,
+       gs_varid TYPE ty_varid,
+
+       gt_tadir TYPE TABLE OF ty_tadir,
+       gs_tadir TYPE ty_tadir,
+
+       gt_node  TYPE STANDARD TABLE OF snodetext,
+       gs_node  TYPE snodetext.
+
+DATA gr_data TYPE REF TO data.
+
+DATA gs_excel TYPE ty_excel.
+
+CONSTANTS :
+
+  c_col_key       TYPE c LENGTH 1 VALUE col_key,
+  c_col_data      TYPE c LENGTH 1 VALUE col_normal,
+
+  c_status_screen TYPE cua_status VALUE 'LD_TREE',
+  c_title         TYPE cua_titlnr VALUE 'Mass Batch Job Create',
+
+  c_normal        TYPE tabname VALUE 'NOMAL_JOBDATA',
+  c_step          TYPE tabname VALUE 'STEP_JOBDATA',
+  c_write         TYPE tabname VALUE 'PRINT_DATA',
+
+  c_upload        TYPE char1 VALUE 'U',
+  c_vail_ok       TYPE char1 VALUE 'C',
+  c_vail_err      TYPE char1 VALUE 'E',
+
+  c_nopro         TYPE char1 VALUE 'G',
+  c_novai         TYPE char1 VALUE 'H',
+
+  c_unknown       TYPE char1 VALUE 'U',
+  c_fail          TYPE char1 VALUE 'F',
+  c_active        TYPE char1 VALUE 'A',
+
+* 배치 예약일 에러.
+  c_passdy        TYPE char1 VALUE 'X',
+* 배치 예약시간
+  c_passtm        TYPE char1 VALUE 'Z',
+* 배치 예약일이 오늘인 경우.
+  c_passed        TYPE char1 VALUE 'Y'.
+
+DATA: gv_run TYPE char1,
+      gv_err TYPE char1.
+
+FIELD-SYMBOLS <fs_table> TYPE STANDARD TABLE.
+FIELD-SYMBOLS : <fs_wa>,
+                <fs_field>,
+                <zstate>,
+                <zstep>,
+                <zreport>,
+                <zvariant>,
+                <ztext>,
+                <zjobname>,
+                <zcheck>,
+                <zjobcount>,
+                <zpr_id>,
+                <zpr_value>,
+                <zsdlstrtdt>,
+                <zsdlstrttm>.
+
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE t1.
+
+PARAMETERS p_btcusr LIKE tbtcjob-authcknam DEFAULT sy-uname.
+
+SELECTION-SCREEN END OF BLOCK b1 .
+
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE t2.
+
+PARAMETERS r_check TYPE char1 RADIOBUTTON GROUP rg1.
+PARAMETERS r_run TYPE char1 RADIOBUTTON GROUP rg1.
+
+SELECTION-SCREEN END OF BLOCK b2.
+
+
+SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE t3.
+
+PARAMETERS p_file LIKE rlgrap-filename DEFAULT 'btc_generate.xlsx'.
+
+SELECTION-SCREEN END OF BLOCK b3 .
+
+AT SELECTION-SCREEN.
+
+AT SELECTION-SCREEN OUTPUT.
+
+*  LOOP AT SCREEN.
+**    IF role_map = 'X'.
+**      IF screen-group1 = 'MD1'.
+**        screen-active = 0.
+**        MODIFY SCREEN.
+**      ENDIF.
+**    ENDIF.
+*  ENDLOOP.
+
+AT SELECTION-SCREEN ON VALUE-REQUEST FOR p_file.
+  PERFORM get_path_f4 CHANGING p_file.
+
+INITIALIZATION.
+  PERFORM init.
+
+START-OF-SELECTION.
+
+  CHECK gv_run IS INITIAL.
+
+  PERFORM start_program.
+
+END-OF-SELECTION.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+***********************************************************
+*CODE_0001 COMMON.
+***********************************************************
+FORM progress USING VALUE(pv_per) VALUE(pv_text).
+
+  CALL FUNCTION 'SAPGUI_PROGRESS_INDICATOR'
+    EXPORTING
+      percentage = pv_per
+      text       = pv_text.
+
+  WAIT UP TO '0.01' SECONDS.
+
+ENDFORM.
+FORM write_message USING VALUE(pv_message).
+
+  MESSAGE s701 WITH pv_message DISPLAY LIKE 'E'.
+
+ENDFORM.
+FORM sum_text  USING    VALUE(pv_value)
+               CHANGING pc_str.
+
+  CONCATENATE pv_value pc_str INTO pc_str.
+
+ENDFORM.
+FORM set_text USING VALUE(pv_text) CHANGING pc_target.
+
+  CHECK pv_text IS NOT INITIAL.
+
+  CLEAR pc_target.
+  pc_target = pv_text.
+
+ENDFORM.
+FORM apend_text USING VALUE(pv_text) CHANGING pc_target.
+
+  CHECK pv_text IS NOT INITIAL.
+
+  CONCATENATE pc_target pv_text INTO pc_target.
+
+ENDFORM.
+FORM get_path_f4  CHANGING pc_file.
+
+  CALL FUNCTION 'F4_FILENAME'
+    IMPORTING
+      file_name = pc_file.
+
+ENDFORM.
+FORM job_open USING VALUE(pv_jobname) VALUE(pv_zstep) CHANGING pv_jobcount.
+
+  CALL FUNCTION 'JOB_OPEN'
+    EXPORTING
+      jobname          = pv_jobname
+    IMPORTING
+      jobcount         = pv_jobcount
+    EXCEPTIONS
+      cant_create_job  = 1
+      invalid_job_data = 2
+      jobname_missing  = 3
+      OTHERS           = 4.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+    gv_err = 'O'.
+  ENDIF.
+
+ENDFORM.
+FORM job_close USING
+  VALUE(pv_jobname)
+  VALUE(pv_jobcount)
+  VALUE(pv_zpr_id)
+  VALUE(pv_zpr_value)
+  VALUE(pv_zsdlstrtdt)
+  VALUE(pv_zsdlstrttm)
+
+  CHANGING pc_refresh.
+
+  DATA : l_prddays    LIKE  tbtcjob-prddays,
+         l_prdhours   LIKE  tbtcjob-prdhours,
+         l_prdmins    LIKE  tbtcjob-prdmins,
+         l_prdmonths  LIKE  tbtcjob-prdmonths,
+         l_prdweeks   LIKE  tbtcjob-prdweeks,
+         l_zsdlstrtdt LIKE  tbtcjob-sdlstrtdt,
+         l_zsdlstrttm LIKE  tbtcjob-sdlstrttm.
+
+  CHECK gv_err IS INITIAL.
+  CHECK pv_zpr_id IS NOT INITIAL.
+* zpr_id type of value lists.
+
+* A = Daily.
+* B = Min.
+* C = Monthly.
+* D = Hour
+* E = Week
+
+  CASE pv_zpr_id.
+    WHEN 'A'. l_prddays = pv_zpr_value.
+    WHEN 'B'. l_prdmins = pv_zpr_value.
+    WHEN 'C'. l_prdmonths = pv_zpr_value.
+    WHEN 'D'. l_prdhours = pv_zpr_value.
+    WHEN 'E'. l_prdweeks = pv_zpr_value.
+  ENDCASE.
+
+  IF pv_zsdlstrtdt IS NOT INITIAL.
+    l_zsdlstrtdt = pv_zsdlstrtdt.
+  ENDIF.
+
+  IF pv_zsdlstrttm IS NOT INITIAL.
+    l_zsdlstrttm = pv_zsdlstrttm.
+  ENDIF.
+
+  CALL FUNCTION 'JOB_CLOSE'
+    EXPORTING
+      jobcount             = pv_jobcount
+      jobname              = pv_jobname
+      prddays              = l_prddays
+      prdhours             = l_prdhours
+      prdmins              = l_prdmins
+      prdmonths            = l_prdmonths
+      prdweeks             = l_prdweeks
+      sdlstrtdt            = l_zsdlstrtdt
+      sdlstrttm            = l_zsdlstrttm
+    EXCEPTIONS
+      cant_start_immediate = 1
+      invalid_startdate    = 2
+      jobname_missing      = 3
+      job_close_failed     = 4
+      job_nosteps          = 5
+      job_notex            = 6
+      lock_failed          = 7
+      invalid_target       = 8
+      invalid_time_zone    = 9
+      OTHERS               = 10.
+  IF sy-subrc = 0.
+    pc_refresh = abap_true.
+  ELSE.
+* Implement suitable error handling here
+    gv_err = 'C'.
+
+  ENDIF.
+
+ENDFORM.
+FORM job_submit USING VALUE(pv_jobname) VALUE(pv_jobcount) VALUE(pv_repo) VALUE(pv_variant).
+
+  CHECK gv_err IS INITIAL.
+
+  CALL FUNCTION 'JOB_SUBMIT'
+    EXPORTING
+      authcknam               = p_btcusr
+      jobcount                = pv_jobcount
+      jobname                 = pv_jobname
+      language                = sy-langu
+      report                  = pv_repo
+      variant                 = pv_variant
+    EXCEPTIONS
+      bad_priparams           = 1
+      bad_xpgflags            = 2
+      invalid_jobdata         = 3
+      jobname_missing         = 4
+      job_notex               = 5
+      job_submit_failed       = 6
+      lock_failed             = 7
+      program_missing         = 8
+      prog_abap_and_extpg_set = 9
+      OTHERS                  = 10.
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+    gv_err = 'S'.
+  ENDIF.
+
+ENDFORM.
+
+
+
+***********************************************************
+*CODE_0002 INIT.
+***********************************************************
+
+FORM init .
+
+  PERFORM set_text USING 'Batch User Setting' CHANGING t1.
+  PERFORM set_text USING 'Run Type' CHANGING t2.
+  PERFORM set_text USING 'Data File Setting' CHANGING t3.
+
+  CLEAR gv_run.
+
+  AUTHORITY-CHECK
+    OBJECT 'S_TCODE'
+        ID 'TCD'
+     FIELD 'SM36'.
+
+  IF sy-subrc <> 0.
+    PERFORM write_message USING 'SM36 T-CODE 실행 권한이 없습니다.'.
+    gv_run = abap_true.
+  ENDIF.
+
+  AUTHORITY-CHECK
+   OBJECT 'S_BTCH_NAM'
+       ID 'BTCUNAME'
+    FIELD '*'.
+  IF sy-subrc <> 0.
+    PERFORM write_message USING '배치 실행 권한이 없습니다.'.
+    gv_run = abap_true.
+  ENDIF.
+
+  IF gt_tadir[] IS INITIAL
+    AND gv_run IS INITIAL.
+
+    DATA : lr_obj_name TYPE RANGE OF obj_name,
+           ls_obj_name LIKE LINE OF lr_obj_name.
+
+    ls_obj_name+0(5) = 'ICPZ*'.
+    APPEND ls_obj_name TO lr_obj_name.
+    ls_obj_name+0(5) = 'ICPY*'.
+    APPEND ls_obj_name TO lr_obj_name.
+
+    CHECK lr_obj_name[] IS NOT INITIAL.
+
+    SELECT pgmid object obj_name
+      INTO TABLE gt_tadir
+      FROM tadir
+      WHERE pgmid = 'R3TR'
+        AND object = 'PROG'
+        AND obj_name IN lr_obj_name.
+
+    SORT gt_tadir BY obj_name.
+
+  ENDIF.
+
+  IF gt_varid[] IS INITIAL
+ AND gt_tadir[] IS NOT INITIAL
+ AND gv_run IS INITIAL.
+
+    DATA : lr_environmnt TYPE RANGE OF varid_env,
+           ls_environmnt LIKE LINE OF lr_environmnt.
+
+    ls_environmnt+0(4) = 'IEQA'.
+    APPEND ls_environmnt TO lr_environmnt.
+    ls_environmnt+0(4) = 'IEQB'.
+    APPEND ls_environmnt TO lr_environmnt.
+
+    CHECK lr_environmnt[] IS NOT INITIAL.
+
+    SELECT mandt report variant environmnt
+
+      INTO TABLE gt_varid
+
+      FROM varid
+      FOR ALL ENTRIES IN gt_tadir[]
+
+      WHERE report = gt_tadir-obj_name
+        AND environmnt IN lr_environmnt.
+    .
+
+    SORT gt_varid BY mandt report variant.
+
+  ENDIF.
+
+ENDFORM.
+
+
+***********************************************************
+*CODE_0003 MAIN.
+***********************************************************
+
+FORM start_program .
+
+  PERFORM create_objects.
+
+  PERFORM excel_up.
+  PERFORM sort_tables.
+
+  PERFORM start_do.
+  PERFORM display_tree.
+
+ENDFORM.
+
+
+***********************************************************
+*CODE_0004 FORM.
+***********************************************************
+
+FORM excel_up .
+
+  DATA l_low TYPE char4.
+
+  DATA: lt_verti_excel LIKE alsmex_tabline OCCURS 0 WITH HEADER LINE,
+        lt_itab_str    LIKE rstrucinfo OCCURS 0  WITH HEADER LINE.
+
+  DATA BEGIN OF lt_fields OCCURS 0.
+  DATA field(40) TYPE c.
+  DATA col TYPE kcd_ex_col_n.
+  DATA END OF lt_fields.
+
+  CALL FUNCTION 'GET_COMPONENT_LIST'
+    EXPORTING
+      program    = sy-cprog
+      fieldname  = 'gs_excel'
+    TABLES
+      components = lt_itab_str.
+
+***********************************************************
+***reading excel file as vertical shape.
+***********************************************************
+  PERFORM progress USING 0 'Data Uploading...'.
+
+  CALL FUNCTION 'ALSM_EXCEL_TO_INTERNAL_TABLE'
+    EXPORTING
+      filename                = p_file
+      i_begin_col             = 1
+      i_begin_row             = 2
+      i_end_col               = 9
+      i_end_row               = 5000
+    TABLES
+      intern                  = lt_verti_excel
+    EXCEPTIONS
+      inconsistent_parameters = 1
+      upload_ole              = 2
+      OTHERS                  = 3.
+
+  PERFORM progress USING 100 'Data Uploading. now...'.
+***********************************************************
+***changing vertical excel to horizon excel.
+***********************************************************
+  REFRESH : lt_fields[].
+
+  DATA l_per TYPE char3.
+  DATA l_t TYPE syst_tabix.
+
+  l_t = lines( lt_verti_excel ).
+
+  LOOP AT lt_verti_excel.
+
+    l_per = 100 * ( sy-tabix / l_t ).
+
+    PERFORM progress USING l_per 'Data Checking. now...'.
+
+    CLEAR l_low.
+    l_low = lt_verti_excel-row.
+
+    CASE l_low.
+      WHEN 1.
+
+        CLEAR lt_fields.
+        READ TABLE lt_itab_str WITH KEY compname = lt_verti_excel-value.
+        IF sy-subrc = 0.
+
+          lt_fields-field = lt_verti_excel-value.
+          lt_fields-col = lt_verti_excel-col.
+
+          TRANSLATE lt_fields-field TO UPPER CASE.
+          CONDENSE lt_fields-field NO-GAPS.
+
+          APPEND lt_fields.
+
+        ELSE.
+          EXIT.
+        ENDIF.
+
+      WHEN OTHERS.
+
+        CLEAR lt_fields.
+        READ TABLE lt_fields WITH KEY col = lt_verti_excel-col.
+
+        IF sy-subrc = 0.
+
+          UNASSIGN <fs_field>.
+
+          ASSIGN COMPONENT lt_fields-field OF STRUCTURE <fs_wa> TO <fs_field>.
+
+          IF <fs_field> IS ASSIGNED.
+
+            PERFORM check_exit
+              USING lt_fields-field
+           CHANGING lt_verti_excel-value.
+
+            <fs_field> = lt_verti_excel-value.
+
+          ELSE.
+            PERFORM write_message USING '필드 Assign Error'.
+            EXIT.
+
+          ENDIF.
+
+        ELSE.
+          PERFORM write_message USING '필드 구조 불일치'.
+          EXIT.
+
+        ENDIF.
+
+        IF <fs_wa> IS NOT INITIAL.
+
+          AT END OF row.
+
+            IF <zstate> IS INITIAL. <zstate> = c_vail_ok. ENDIF.
+
+            CLEAR gs_tabl.
+            UNASSIGN <fs_table>.
+
+            CASE <zstep>.
+              WHEN 0.       READ TABLE gt_tabl INTO gs_tabl WITH TABLE KEY ztab_nm = c_normal.
+              WHEN OTHERS. READ TABLE gt_tabl INTO gs_tabl WITH TABLE KEY ztab_nm = c_step.
+            ENDCASE.
+
+            IF sy-subrc = '0'.
+
+              ASSIGN gs_tabl-zdata->* TO <fs_table>.
+              IF <fs_table> IS ASSIGNED.
+                APPEND <fs_wa> TO <fs_table>.
+                CLEAR <fs_wa>.
+              ENDIF.
+
+            ENDIF.
+
+          ENDAT.
+
+        ENDIF.
+
+    ENDCASE.
+
+  ENDLOOP.
+
+
+ENDFORM.
+FORM start_do.
+
+  DATA l_index TYPE sy-tabix VALUE 0.
+
+  CASE abap_true.
+    WHEN r_check.
+    WHEN r_run.
+
+      PERFORM progress USING 10 'Batch Job is Creating, now...'.
+
+    WHEN OTHERS.
+  ENDCASE.
+
+  CLEAR gs_node.
+
+  gs_node-tlevel = 1.
+  gs_node-name   = 'Batch Job'.
+  gs_node-nlength = 20.
+  gs_node-color = c_col_key.
+  gs_node-text   = 'Batch Job List'.
+  gs_node-tlength = 50.
+  APPEND gs_node TO gt_node.
+
+  LOOP AT gt_tabl INTO gs_tabl.
+
+    l_index = l_index + 1.
+
+    CLEAR gs_node.
+
+    CASE l_index.
+      WHEN 1.
+        gs_node-tlevel = 2.
+        gs_node-name   = 'Single Step'.
+        gs_node-nlength = 20.
+        gs_node-color = c_col_key.
+        gs_node-text   = 'Non-Multi Step Batch Job List'.
+        gs_node-tlength = 50.
+        APPEND gs_node TO gt_node.
+      WHEN 2.
+        gs_node-tlevel = 2.
+        gs_node-name   = 'Multi Step'.
+        gs_node-nlength = 20.
+        gs_node-color = c_col_key.
+        gs_node-text   = 'Multi Step Batch Job List'.
+        gs_node-tlength = 50.
+        APPEND gs_node TO gt_node.
+    ENDCASE.
+
+    ASSIGN gs_tabl-zdata->* TO <fs_table>.
+
+    CHECK <fs_table> IS ASSIGNED.
+
+    CLEAR gv_err.
+
+    CASE abap_true.
+      WHEN r_check.
+      WHEN r_run.
+
+        PERFORM run_create.
+
+      WHEN OTHERS.
+    ENDCASE.
+
+    PERFORM display_data.
+
+  ENDLOOP.
+
+ENDFORM.
+FORM display_data.
+
+  DATA l_text TYPE seu_text.
+
+  LOOP AT <fs_table> INTO <fs_wa>.
+
+    PERFORM assign_fields.
+
+    CLEAR gs_node.
+
+    CASE <zstep>.
+      WHEN '0'.
+        gs_node-tlevel = 3.
+        PERFORM set_light.
+        PERFORM set_node_text USING '3' <zjobname> 40 c_col_key.
+      WHEN '1'.
+        gs_node-tlevel = 3.
+        PERFORM set_light.
+        PERFORM set_node_text USING '3' <zjobname> 40 c_col_key.
+        APPEND gs_node TO gt_node.
+
+        CLEAR gs_node.
+        gs_node-tlevel = 4.
+      WHEN OTHERS.
+        gs_node-tlevel = 4.
+    ENDCASE.
+
+    CASE <zstep>.
+      WHEN '0'. l_text = 'Single Step'.
+      WHEN OTHERS. CONCATENATE 'Multi Step - ' <zstep> INTO l_text.
+    ENDCASE.
+
+    PERFORM set_node_text USING '4' l_text 17 c_col_data.
+    PERFORM set_node_text USING '5' <zreport> 20 c_col_data.
+    PERFORM set_node_text USING '6' <zvariant> 14 c_col_data.
+    PERFORM set_node_text USING '7' <ztext> 75 c_col_data.
+
+    APPEND gs_node TO gt_node.
+
+  ENDLOOP.
+
+ENDFORM.
+FORM create_objects .
+
+  CLEAR gs_tabl.
+  gs_tabl-ztab_nm = c_normal.
+  CREATE DATA gs_tabl-zdata TYPE STANDARD TABLE OF ty_excel.
+
+  INSERT gs_tabl INTO TABLE gt_tabl.
+
+  CLEAR gs_tabl.
+  gs_tabl-ztab_nm = c_step.
+  CREATE DATA gs_tabl-zdata TYPE STANDARD TABLE OF ty_excel.
+
+  INSERT gs_tabl INTO TABLE gt_tabl.
+
+  CREATE DATA gr_data TYPE ty_excel.
+  ASSIGN gr_data->* TO <fs_wa>.
+
+  PERFORM assign_fields.
+
+ENDFORM.
+FORM assign_fields .
+
+  ASSIGN COMPONENT 'ZSTATE' OF STRUCTURE <fs_wa> TO <zstate>.
+  ASSIGN COMPONENT 'ZSTEP' OF STRUCTURE <fs_wa> TO <zstep>.
+  ASSIGN COMPONENT 'ZREPORT' OF STRUCTURE <fs_wa> TO <zreport>.
+  ASSIGN COMPONENT 'ZVARIANT' OF STRUCTURE <fs_wa> TO <zvariant>.
+  ASSIGN COMPONENT 'ZTEXT' OF STRUCTURE <fs_wa> TO <ztext>.
+  ASSIGN COMPONENT 'ZCHECK' OF STRUCTURE <fs_wa> TO <zcheck>.
+  ASSIGN COMPONENT 'ZJOBNAME' OF STRUCTURE <fs_wa> TO <zjobname>.
+  ASSIGN COMPONENT 'ZJOBCOUNT' OF STRUCTURE <fs_wa> TO <zjobcount>.
+  ASSIGN COMPONENT 'ZPR_ID' OF STRUCTURE <fs_wa> TO <zpr_id>.
+  ASSIGN COMPONENT 'ZPR_VALUE' OF STRUCTURE <fs_wa> TO <zpr_value>.
+  ASSIGN COMPONENT 'ZSDLSTRTDT' OF STRUCTURE <fs_wa> TO <zsdlstrtdt>.
+  ASSIGN COMPONENT 'ZSDLSTRTTM' OF STRUCTURE <fs_wa> TO <zsdlstrttm>.
+
+ENDFORM.
+FORM sort_tables .
+
+  LOOP AT gt_tabl INTO gs_tabl.
+
+    ASSIGN gs_tabl-zdata->* TO <fs_table>.
+
+    CASE gs_tabl-ztab_nm.
+      WHEN c_normal.
+        SORT <fs_table> BY ('zjobname').
+      WHEN c_step.
+        SORT <fs_table> BY ('zindex') ('zjobname') ('zstep').
+    ENDCASE.
+
+
+  ENDLOOP.
+
+ENDFORM.
+FORM check_exit USING VALUE(pv_field) CHANGING pc_value.
+
+  DEFINE set_para.
+
+    CONCATENATE l_gubun &1 INTO l_gubun.
+    CONDENSE l_gubun NO-GAPS.
+    SHIFT l_gubun LEFT DELETING LEADING ' '.
+
+  END-OF-DEFINITION.
+
+  DATA l_gubun TYPE char10.
+  DATA l_s TYPE i VALUE 0.
+  DATA l_e TYPE i VALUE 1.
+
+  CONSTANTS c_upper TYPE char1 VALUE 'A'.
+  CONSTANTS c_nogap TYPE char1 VALUE 'B'.
+  CONSTANTS c_2text TYPE char1 VALUE 'C'.
+  CONSTANTS c_check TYPE char1 VALUE 'D'.
+  CONSTANTS c_ckpro TYPE char1 VALUE 'E'.
+  CONSTANTS c_ckvai TYPE char1 VALUE 'F'.
+
+  CONDENSE l_gubun.
+
+  CASE pv_field.
+    WHEN 'ZREPORT'.
+      set_para c_upper.
+      set_para c_ckpro.
+    WHEN 'ZVARIANT'.
+      set_para c_upper.
+      set_para c_ckvai.
+    WHEN 'ZJOBNAME'.
+      set_para c_upper.
+    WHEN 'ZPR_ID' OR 'ZPR_VALUE'.
+      set_para c_upper.
+      set_para c_nogap.
+    WHEN 'ZSDLSTRTDT' OR 'ZSDLSTRTTM'.
+      set_para c_2text.
+      set_para c_check.
+    WHEN OTHERS.
+      EXIT.
+  ENDCASE.
+
+  DO.
+
+    CASE l_gubun+l_s(l_e).
+*    CASE l_gubun+0(1).
+      WHEN c_upper.
+
+        TRANSLATE pc_value TO UPPER CASE.
+
+      WHEN c_nogap.
+
+        CONDENSE pc_value NO-GAPS.
+
+      WHEN c_2text.
+
+        REPLACE ALL OCCURRENCES OF '-' IN pc_value WITH ``.
+        REPLACE ALL OCCURRENCES OF ':' IN pc_value WITH ``.
+        CONDENSE pc_value NO-GAPS.
+        SHIFT pc_value LEFT DELETING LEADING ' '.
+
+      WHEN c_check.
+
+        CASE pv_field.
+          WHEN 'ZSDLSTRTDT'.
+            IF ( pc_value < sy-datum ).
+              <zstate> = c_passdy.
+              PERFORM apend_text USING '예약 일자 "' CHANGING <ztext>.
+              PERFORM apend_text USING pc_value CHANGING <ztext>.
+              PERFORM apend_text USING '" 오류 입니다.|| ' CHANGING <ztext>.
+            ELSEIF ( pc_value = sy-datum ).
+              <zstate> = c_passed.
+            ENDIF.
+          WHEN 'ZSDLSTRTTM'.
+            IF ( pc_value <= sy-uzeit ) AND ( <zstate> = c_passed ).
+              <zstate> = c_passtm.
+
+              PERFORM apend_text USING '예약 일자 "' CHANGING <ztext>.
+              PERFORM apend_text USING <zsdlstrtdt> CHANGING <ztext>.
+              PERFORM apend_text USING '" 예약 시간 "' CHANGING <ztext>.
+              PERFORM apend_text USING pc_value CHANGING <ztext>.
+              PERFORM apend_text USING '" 오류 입니다.|| ' CHANGING <ztext>.
+            ELSEIF ( pc_value > sy-uzeit ) AND ( <zstate> = c_passed ).
+              CLEAR <zstate>.
+            ENDIF.
+        ENDCASE.
+
+      WHEN c_ckpro.
+
+        IF ( pc_value+0(1) = 'Z' ) OR ( pc_value+0(1) = 'Y' ).
+          READ TABLE gt_tadir TRANSPORTING NO FIELDS
+                               WITH KEY obj_name = pc_value
+                               BINARY SEARCH.
+        ELSE.
+          SELECT COUNT(*)
+            FROM tadir
+            WHERE pgmid = 'R3TR'
+              AND object = 'PROG'
+              AND obj_name = pc_value.
+        ENDIF.
+
+        CASE sy-subrc.
+          WHEN 0.
+          WHEN OTHERS.
+            <zstate> = c_nopro.
+
+            PERFORM apend_text USING '프로그램 "' CHANGING <ztext>.
+            PERFORM apend_text USING pc_value CHANGING <ztext>.
+            PERFORM apend_text USING '" 이 없습니다. || ' CHANGING <ztext>.
+        ENDCASE.
+
+      WHEN c_ckvai.
+
+        IF pc_value IS NOT INITIAL.
+
+          READ TABLE gt_varid TRANSPORTING NO FIELDS
+                               WITH KEY mandt = sy-mandt
+                                        report = <zreport>
+                                        variant = pc_value
+                               BINARY SEARCH.
+          CASE sy-subrc.
+            WHEN 0.
+            WHEN OTHERS.
+              <zstate> = c_novai.
+              PERFORM apend_text USING '프로그램 "' CHANGING <ztext>.
+              PERFORM apend_text USING <zreport> CHANGING <ztext>.
+              PERFORM apend_text USING '" 에 ' CHANGING <ztext>.
+
+              PERFORM apend_text USING '변형 "' CHANGING <ztext>.
+              PERFORM apend_text USING pc_value CHANGING <ztext>.
+              PERFORM apend_text USING '"이 없습니다. ||' CHANGING <ztext>.
+          ENDCASE.
+        ENDIF.
+
+      WHEN OTHERS.
+        EXIT.
+    ENDCASE.
+
+*    SHIFT l_gubun LEFT.
+    l_e = l_e + 1.
+    l_s = l_s + 1.
+
+  ENDDO.
+
+ENDFORM.
+FORM set_light .
+
+  CASE abap_true.
+    WHEN r_check.
+
+      CASE <zstate>.
+        WHEN c_vail_ok OR c_active OR c_upload.
+          gs_node-text2 = icon_led_green.
+        WHEN OTHERS.
+          gs_node-text2 = icon_led_red.
+      ENDCASE.
+
+    WHEN r_run.
+
+      CASE <zstate>.
+        WHEN c_active.
+          gs_node-text2 = icon_led_green.
+        WHEN c_fail.
+          gs_node-text2 = icon_led_red.
+      ENDCASE.
+
+    WHEN OTHERS.
+  ENDCASE.
+
+  gs_node-tlength2 = 4.
+  gs_node-tcolor = c_col_data.
+*  gs_node-kind2 = 'I'.
+
+ENDFORM.
+FORM run_create .
+
+  DATA : lt_list TYPE TABLE OF ty_cnt_list,
+         ls_list TYPE ty_cnt_list.
+
+  DATA l_refresh TYPE char1.
+
+  DATA l_per TYPE char3.
+  DATA l_t TYPE syst_tabix.
+
+  l_t = lines( <fs_table> ).
+  l_per = 100 * ( sy-tabix / l_t ).
+
+  LOOP AT <fs_table> ASSIGNING <fs_wa>.
+
+    l_per = ( 100 * ( sy-tabix / l_t ) + 10 ).
+    PERFORM progress USING l_per 'Batch Job is Creating, now...'.
+
+    PERFORM assign_fields.
+
+    CHECK <zstate> = c_vail_ok.
+
+    CASE <zstep>.
+      WHEN 0.
+        PERFORM job_open USING <zjobname> <zstep> CHANGING <zjobcount>.
+      WHEN OTHERS.
+
+        READ TABLE lt_list TRANSPORTING NO FIELDS WITH KEY zjobname = ls_list-zjobname.
+        IF sy-subrc = '0'.
+          <zjobcount> = ls_list-zjobcount.
+        ELSE.
+          PERFORM job_open USING <zjobname> <zstep> CHANGING <zjobcount>.
+
+          IF <zjobcount> IS INITIAL.
+
+            gv_err = 'J'.
+            l_refresh = abap_true.
+
+          ELSE.
+
+            CLEAR ls_list.
+            MOVE-CORRESPONDING <fs_wa> TO ls_list.
+
+            APPEND ls_list TO lt_list.
+
+          ENDIF.
+
+        ENDIF.
+
+    ENDCASE.
+
+    PERFORM job_submit
+      USING
+            <zjobname>
+            <zjobcount>
+            <zreport>
+            <zvariant>
+            .
+    PERFORM job_close
+      USING
+            <zjobname>
+            <zjobcount>
+            <zpr_id>
+            <zpr_value>
+            <zsdlstrtdt>
+            <zsdlstrttm>
+  CHANGING l_refresh
+            .
+
+    IF l_refresh = abap_true.
+
+      REFRESH lt_list[].
+      CLEAR l_refresh.
+
+    ENDIF.
+
+    IF gv_err IS NOT INITIAL.
+      CASE gv_err.
+        WHEN 'O'.
+          PERFORM set_text USING '작업 OPEN 실패' CHANGING <ztext>.
+        WHEN 'S'.
+          PERFORM set_text USING '작업 SUBMIT 실패' CHANGING <ztext>.
+        WHEN 'C'.
+          PERFORM set_text USING '작업 CLOSE 실패' CHANGING <ztext>.
+        WHEN 'J'.
+          PERFORM set_text USING 'Job Count 확인 실패(Step 추가 에러)' CHANGING <ztext>.
+        WHEN OTHERS.
+      ENDCASE.
+*        EXIT.
+      <zstate> = c_fail.
+    ELSE.
+      <zstate> = c_active.
+    ENDIF.
+
+  ENDLOOP.
+
+ENDFORM.
+FORM set_node_text  USING    VALUE(pv_num)
+                             VALUE(pv_text)
+                             VALUE(pv_length)
+                             VALUE(pv_color).
+
+  DATA l_field TYPE fieldname.
+
+  FIELD-SYMBOLS <fs>.
+
+  CONCATENATE 'gs_node-text' pv_num INTO l_field.
+  CONDENSE l_field NO-GAPS.
+  ASSIGN (l_field) TO <fs>.
+  <fs> = pv_text.
+
+  CONCATENATE 'gs_node-tlength' pv_num INTO l_field.
+  CONDENSE l_field NO-GAPS.
+  ASSIGN (l_field) TO <fs>.
+  <fs> = pv_length.
+
+  CONCATENATE 'gs_node-tcolor' pv_num INTO l_field.
+  CONDENSE l_field NO-GAPS.
+  ASSIGN (l_field) TO <fs>.
+  <fs> = pv_color.
+
+
+
+ENDFORM.
+FORM display_tree .
+
+  CALL FUNCTION 'RS_TREE_CONSTRUCT'
+*   EXPORTING
+*     INSERT_ID                = '000000'
+*     RELATIONSHIP             = ' '
+*     LOG                      =
+    TABLES
+      nodetab            = gt_node
+    EXCEPTIONS
+      tree_failure       = 1
+      id_not_found       = 2
+      wrong_relationship = 3
+      OTHERS             = 4.
+  IF sy-subrc <> 0.
+    WRITE sy-subrc.
+  ENDIF.
+
+  CALL FUNCTION 'RS_TREE_LIST_DISPLAY'
+    EXPORTING
+      callback_program    = sy-repid
+      callback_gui_status = 'CB_GUI_STATUS'.
+
+ENDFORM.
+FORM cb_gui_status.
+
+  DATA : lt_fcode TYPE TABLE OF sy-ucomm,
+         ls_fcode LIKE LINE OF lt_fcode.
+
+*TRAD       TRDL       TRRN       TRMV       TRMK       TREP       TRCM
+  CLEAR ls_fcode.
+  ls_fcode = 'TRAD'. APPEND ls_fcode TO lt_fcode.
+  ls_fcode = 'TRDL'. APPEND ls_fcode TO lt_fcode.
+  ls_fcode = 'TRRN'. APPEND ls_fcode TO lt_fcode.
+  ls_fcode = 'TRMV'. APPEND ls_fcode TO lt_fcode.
+  ls_fcode = 'TRMK'. APPEND ls_fcode TO lt_fcode.
+
+  SET PF-STATUS c_status_screen OF PROGRAM 'SAPLSEUT' EXCLUDING lt_fcode.
+*  SET TITLEBAR  c_title.
+
+ENDFORM.
