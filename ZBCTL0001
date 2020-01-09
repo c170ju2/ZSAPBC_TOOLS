@@ -486,10 +486,14 @@ FORM start_program .
   PERFORM create_objects.
 
   PERFORM excel_up.
-  PERFORM sort_tables.
 
-  PERFORM start_do.
-  PERFORM display_tree.
+  IF gv_run IS INITIAL.
+
+    PERFORM sort_tables.
+    PERFORM start_do.
+    PERFORM display_tree.
+
+  ENDIF.
 
 ENDFORM.
 
@@ -535,6 +539,12 @@ FORM excel_up .
       inconsistent_parameters = 1
       upload_ole              = 2
       OTHERS                  = 3.
+
+  IF lt_verti_excel[] IS INITIAL.
+    PERFORM write_message USING 'Excel Upload Data가 없습니다.'.
+    gv_run = abap_true.
+    EXIT.
+  ENDIF.
 
   PERFORM progress USING 100 'Data Uploading. now...'.
 ***********************************************************
