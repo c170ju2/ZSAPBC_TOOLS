@@ -1139,6 +1139,6 @@ FORM cb_gui_status.
   ls_fcode = 'TRMK'. APPEND ls_fcode TO lt_fcode.
 
   SET PF-STATUS c_status_screen OF PROGRAM 'SAPLSEUT' EXCLUDING lt_fcode.
-*  SET TITLEBAR  c_title.
+  SET TITLEBAR  c_title.
 
 ENDFORM.
